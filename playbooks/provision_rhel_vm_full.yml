@@ -1,0 +1,111 @@
+---
+- name: Provision RHEL VM with OVN-Localnet Networking
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # --- Survey Variables (AAP Extra Vars) ---
+    vm_name: "rhel-prod-vm"
+    target_namespace: "default"
+    os_choice: "rhel9"        # Options: rhel8, rhel9, rhel10
+    vm_size: "u1.medium"
+    storage_class: "lvms-vg1-immediate"
+    ssh_secret_name: "noowens-mac-pub"
+    
+    # Matches the 'name' in your NetworkAttachmentDefinition
+    nad_name: "baremetal-network"
+
+    # Mapping for Cluster-wide Preferences
+    os_prefs:
+      rhel8: "rhel.8"
+      rhel9: "rhel.9"
+      rhel10: "rhel.10"
+
+  tasks:
+    - name: Define VirtualMachine Manifest
+      ansible.builtin.set_fact:
+        vm_manifest:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          metadata:
+            name: "{{ vm_name }}"
+            namespace: "{{ target_namespace }}"
+            labels:
+              vm.openshift.io/folder: ''
+          spec:
+            runStrategy: Always
+            instancetype:
+              kind: VirtualMachineClusterInstancetype
+              name: "{{ vm_size }}"
+            preference:
+              kind: VirtualMachineClusterPreference
+              name: "{{ os_prefs[os_choice] }}"
+            dataVolumeTemplates:
+              - metadata:
+                  name: "{{ vm_name }}-volume"
+                spec:
+                  sourceRef:
+                    kind: DataSource
+                    name: "{{ os_choice }}"
+                    namespace: openshift-virtualization-os-images
+                  storage:
+                    resources:
+                      requests:
+                        storage: 30Gi
+                    storageClassName: "{{ storage_class }}"
+            template:
+              metadata:
+                labels:
+                  network.kubevirt.io/headlessService: headless
+                  kubevirt.io/domain: "{{ vm_name }}"
+              spec:
+                accessCredentials:
+                  - sshPublicKey:
+                      propagationMethod:
+                        noCloud: {}
+                      source:
+                        secret:
+                          secretName: "{{ ssh_secret_name }}"
+                domain:
+                  devices:
+                    # Required to prevent automatic POD network attachment from conflicting
+                    autoattachPodInterface: false
+                    disks:
+                      - bootOrder: 1
+                        name: rootdisk
+                        disk:
+                          bus: virtio
+                    interfaces:
+                      - name: default
+                        masquerade: {}
+                      - name: baremetal
+                        bridge: {}
+                        model: virtio
+                networks:
+                  - name: default
+                    pod: {}
+                  - name: baremetal
+                    multus:
+                      # References the NetworkAttachmentDefinition you provided
+                      networkName: "{{ nad_name }}"
+                volumes:
+                  - name: rootdisk
+                    dataVolume:
+                      name: "{{ vm_name }}-volume"
+                  - name: cloudinitdisk
+                    cloudInitNoCloud:
+                      userData: |
+                        #cloud-config
+                        user: rhel
+                        # Internal cluster traffic uses eth0; external/Satellite uses eth1
+
+    - name: Deploy VM to OpenShift
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ vm_manifest }}"
+      register: vm_result
+
+    - name: Output Summary
+      ansible.builtin.debug:
+        msg: "VM {{ vm_name }} created. Attachment to {{ nad_name }} successful."
