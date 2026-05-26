@@ -4,10 +4,6 @@
   connection: local
   gather_facts: false
 
-  # Load the vault file (or ensure it is included in your project)
-  vars_files:
-    - vault_vars.yml
-
   vars:
     # --- Survey Variables ---
     vm_name: "rhel-prod-vm"
