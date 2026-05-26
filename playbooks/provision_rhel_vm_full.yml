@@ -80,6 +80,12 @@
                   - name: rootdisk
                     dataVolume:
                       name: "{{ vm_name }}-volume"
+                  # This volume is REQUIRED to propagate the SSH key via noCloud
+                  - name: cloudinitdisk
+                    cloudInitNoCloud:
+                      # Leave userData empty or minimal; the SSH key is injected here automatically
+                      userData: "#cloud-config\nssh_pwauth: False"
+
             # --- The DataVolume Template handles storage provisioning ---
             dataVolumeTemplates:
               - metadata:
