@@ -13,7 +13,7 @@
     vm_name: "{{ survey_vm_name }}"
     target_namespace: "default"
     os_choice: "{{ survey_os_choice }}"
-    vm_size: "u1.small"
+    vm_size: "u1.medium"
     storage_class: "lvms-vg1-immediate"
     ssh_secret_name: "noowens-mac-pub"
     nad_name: "baremetal-network"
@@ -69,7 +69,21 @@
                 volumes:
                   - name: rootdisk
                     dataVolume:
-                      name: "{{ vm_name }}"
+                      name: "{{ vm_name }}-volume"
+            # --- The DataVolume Template handles storage provisioning ---
+            dataVolumeTemplates:
+              - metadata:
+                  name: "{{ vm_name }}-volume"
+                spec:
+                  sourceRef:
+                    kind: DataSource
+                    name: "{{ os_choice }}" # Matches 'rhel8' or 'rhel9' or 'rhel10'
+                    namespace: openshift-virtualization-os-images
+                  storage:
+                    resources:
+                      requests:
+                        storage: 30Gi
+                    storageClassName: "{{ storage_class }}"
 
     - name: Deploy VM to OpenShift
       kubernetes.core.k8s:
