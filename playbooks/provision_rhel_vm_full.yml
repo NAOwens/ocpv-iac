@@ -50,6 +50,16 @@
               name: "{{ os_prefs[os_choice] }}"
             template:
               spec:
+                accessCredentials:
+                  - sshPublicKey:
+                      propagationMethod:
+                        noCloud: {}
+                      source:
+                        secret:
+                          secretName: "{{ ssh_secret_name }}"
+                          # Matches the 'key' field in your secret
+                          dataKey: key
+
                 domain:
                   devices:
                     disks:
