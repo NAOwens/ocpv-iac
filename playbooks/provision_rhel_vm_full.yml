@@ -4,10 +4,6 @@
   connection: local
   gather_facts: false
 
-  # Explicitly point to the vault file you moved
-  vars_files:
-    - group_vars/all/vault_vars.yml
-
   vars:
     # --- Survey Variables ---
     vm_name: "{{ survey_vm_name }}"
@@ -26,12 +22,6 @@
       rhel10: "rhel.10"
 
   tasks:
-#    - name: Create temporary Kubeconfig file from Vault
-#      ansible.builtin.copy:
-#        content: "{{ vault_kubeconfig_content }}"
-#        dest: "/tmp/kubeconfig_{{ vm_name }}"
-#        mode: '0600'
-
     - name: Define VirtualMachine Manifest
       ansible.builtin.set_fact:
         vm_manifest:
@@ -110,14 +100,6 @@
         api_key: "{{ sv_token }}"
         verify_ssl: false  # Use false if using the internal service address with self-signed certs
       register: vm_result
-#      environment:
-#        KUBECONFIG: "/tmp/kubeconfig_{{ vm_name }}"
-
-#    - name: Remove temporary Kubeconfig
-#      ansible.builtin.file:
-#        path: "/tmp/kubeconfig_{{ vm_name }}"
-#        state: absent
-#      when: vm_result is defined
 
     - name: Output Summary
       ansible.builtin.debug:
