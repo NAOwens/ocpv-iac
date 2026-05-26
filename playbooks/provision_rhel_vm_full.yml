@@ -17,7 +17,7 @@
     storage_class: "lvms-vg1-immediate"
     ssh_secret_name: "noowens-mac-pub"
     nad_name: "baremetal-network"
-    sv_host: "{{ survey_host }}"
+    sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"
 
     os_prefs:
