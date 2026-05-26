@@ -4,6 +4,10 @@
   connection: local
   gather_facts: false
 
+  # Explicitly point to the vault file you moved
+  vars_files:
+    - group_vars/all/vault_vars.yml
+
   vars:
     # --- Survey Variables ---
     vm_name: "{{ survey_vm_name }}"
