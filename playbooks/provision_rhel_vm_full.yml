@@ -48,7 +48,28 @@
             preference:
               kind: VirtualMachineClusterPreference
               name: "{{ os_prefs[os_choice] }}"
-            # ... (Rest of manifest remains as provided in your original file)
+            template:
+              spec:
+                domain:
+                  devices:
+                    disks:
+                      - name: rootdisk
+                        disk: {}
+                    interfaces:
+                      - name: default
+                        masquerade: {}
+                      - name: bridge-net
+                        bridge: {}
+                networks:
+                  - name: default
+                    pod: {}
+                  - name: bridge-net
+                    multus:
+                      networkName: "{{ nad_name }}"
+                volumes:
+                  - name: rootdisk
+                    dataVolume:
+                      name: "{{ vm_name }}"
 
     - name: Deploy VM to OpenShift
       kubernetes.core.k8s:
