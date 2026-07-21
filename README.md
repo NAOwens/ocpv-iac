@@ -35,6 +35,49 @@ The automation manages the following key areas:
 
 ---
 
+## 2. VM Resize Playbook (`resize_vm.yml`)
+
+**Purpose:** Resizes the CPU and memory of an existing Virtual Machine in OpenShift Virtualization without recreating it.
+**Target Environment:** OpenShift Virtualization (KubeVirt).
+
+**Key Features:**
+
+* **Instancetype Removal:** Automatically detects and removes `instancetype` and `preference` references from the VM spec, which are incompatible with explicit CPU/memory sizing.
+* **Controlled Restart:** Optionally stops the VM before patching and restarts it afterward, waiting for the VMI to fully terminate and then reach `Running` phase before completing.
+* **Live-Edit Support:** If `restart_vm` is false (or the VM is already halted), the patch is applied without a stop/start cycle — useful when changes will take effect on the next manual boot.
+* **Resize Summary:** Emits a post-task debug message confirming the final CPU topology, memory, and whether a restart occurred.
+
+**Required Variables / Survey Inputs:**
+
+| Variable | Description |
+|---|---|
+| `survey_vm_name` | Name of the VM to resize |
+| `survey_namespace` | Kubernetes namespace containing the VM |
+| `survey_cpu_cores` | Number of CPU cores per socket |
+| `survey_cpu_sockets` | Number of CPU sockets (default: `1`) |
+| `survey_cpu_threads` | Number of threads per core (default: `1`) |
+| `survey_memory` | Memory in Kubernetes quantity notation (e.g., `4Gi`, `2048Mi`) |
+| `survey_restart_vm` | Boolean — stop and restart the VM to apply changes (default: `true`) |
+| `survey_url` | API host URL for the target OpenShift cluster |
+| `survey_token` | API token used for authentication |
+
+**Example execution:**
+
+```bash
+ansible-playbook playbooks/resize_vm.yml \
+  -e "survey_vm_name=my-rhel-vm" \
+  -e "survey_namespace=my-namespace" \
+  -e "survey_cpu_cores=4" \
+  -e "survey_cpu_sockets=1" \
+  -e "survey_cpu_threads=1" \
+  -e "survey_memory=8Gi" \
+  -e "survey_restart_vm=true" \
+  -e "survey_url=https://api.cluster.example.com:6443" \
+  -e "survey_token=<token>"
+```
+
+---
+
 ## Workflow / Order of Operations
 
 When deploying a new Virtual Machine, execute the playbook as follows:
