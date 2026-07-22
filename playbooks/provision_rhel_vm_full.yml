@@ -9,7 +9,7 @@
     vm_name: "{{ survey_vm_name }}"
     target_namespace: "default"
     os_choice: "{{ survey_os_choice }}"
-    vm_cpu: "{{ survey_vm_cpu | default(1) | int }}"
+    vm_cpu: 1
     vm_memory: 4Gi
 #    vm_memory: "{{ survey_vm_memory }}"
     storage_class: "lvms-vg1-immediate"
