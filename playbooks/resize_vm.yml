@@ -17,7 +17,7 @@
     - name: Validate at least one resize parameter is provided
       ansible.builtin.assert:
         that:
-          - survey_vm_cpu is defined or survey_vm_memory is defined
+          - (survey_vm_cpu | default('')) | length > 0 or (survey_vm_memory | default('')) | length > 0
         fail_msg: "At least one of survey_vm_cpu or survey_vm_memory must be provided."
 
     - name: Fetch current VM definition
@@ -45,14 +45,14 @@
         cpu_patch_raw: |
           cpu:
             cores: {{ survey_vm_cpu | int }}
-      when: survey_vm_cpu is defined
+      when: (survey_vm_cpu | default('')) | length > 0
 
     - name: Build memory patch
       ansible.builtin.set_fact:
         memory_patch:
           memory:
             guest: "{{ survey_vm_memory }}"
-      when: survey_vm_memory is defined
+      when: (survey_vm_memory | default('')) | length > 0
 
     - name: Merge domain patch
       ansible.builtin.set_fact:
@@ -79,6 +79,6 @@
       ansible.builtin.debug:
         msg: >-
           VM {{ vm_name }} resized:
-          {% if survey_vm_cpu is defined %}CPU cores={{ survey_vm_cpu }}{% endif %}
-          {% if survey_vm_memory is defined %}Memory={{ survey_vm_memory }}{% endif %}.
+          {% if (survey_vm_cpu | default('')) | length > 0 %}CPU cores={{ survey_vm_cpu }}{% endif %}
+          {% if (survey_vm_memory | default('')) | length > 0 %}Memory={{ survey_vm_memory }}{% endif %}.
           Note: changes take effect on next VM restart.
