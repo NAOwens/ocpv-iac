@@ -9,17 +9,13 @@
     vm_name: "{{ survey_vm_name }}"
     target_namespace: "default"
     os_choice: "{{ survey_os_choice }}"
-    vm_size: "u1.medium"
+    vm_cpu: 1
+    vm_memory: "4Gi"
     storage_class: "lvms-vg1-immediate"
     ssh_secret_name: "noowens-mac-pub"
     nad_name: "baremetal-network"
     sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"
-
-    os_prefs:
-      rhel8: "rhel.8"
-      rhel9: "rhel.9"
-      rhel10: "rhel.10"
 
   tasks:
     - name: Define VirtualMachine Manifest
@@ -32,12 +28,6 @@
             namespace: "{{ target_namespace }}"
           spec:
             runStrategy: Always
-            instancetype:
-              kind: VirtualMachineClusterInstancetype
-              name: "{{ vm_size }}"
-            preference:
-              kind: VirtualMachineClusterPreference
-              name: "{{ os_prefs[os_choice] }}"
             template:
               spec:
                 accessCredentials:
@@ -51,6 +41,10 @@
                           dataKey: key
 
                 domain:
+                  cpu:
+                    cores: "{{ vm_cpu }}"
+                  memory:
+                    guest: "{{ vm_memory }}"
                   devices:
                     disks:
                       - name: rootdisk
