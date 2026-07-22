@@ -73,7 +73,7 @@
                 spec:
                   sourceRef:
                     kind: DataSource
-                    name: "{{ os_choice }}"
+                    name: "{{ os_choice }}" #Matches 'rhel8' or 'rhel9' or 'rhel10'
                     namespace: openshift-virtualization-os-images
                   storage:
                     resources:
