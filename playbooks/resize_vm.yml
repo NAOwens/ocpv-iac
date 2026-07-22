@@ -23,6 +23,20 @@
           - has_cpu_change or has_memory_change
         fail_msg: "At least one of survey_vm_cpu or survey_vm_memory must be provided."
 
+    - name: Validate minimum CPU
+      ansible.builtin.assert:
+        that:
+          - survey_vm_cpu | int >= 1
+        fail_msg: "CPU must be at least 1 core (got {{ survey_vm_cpu }})."
+      when: has_cpu_change
+
+    - name: Validate minimum memory
+      ansible.builtin.assert:
+        that:
+          - survey_vm_memory | regex_replace('[^0-9]', '') | int >= 2
+        fail_msg: "Memory must be at least 2Gi (got {{ survey_vm_memory }})."
+      when: has_memory_change
+
     - name: Fetch current VM definition
       kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
