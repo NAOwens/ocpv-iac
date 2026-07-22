@@ -1,0 +1,84 @@
+---
+- name: Resize VM CPU and/or Memory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # --- Survey Variables ---
+    vm_name: "{{ survey_vm_name }}"
+    target_namespace: "{{ survey_target_namespace | default('default') }}"
+    vm_cpu: "{{ survey_vm_cpu | default(omit) }}"
+    vm_memory: "{{ survey_vm_memory | default(omit) }}"
+    sv_host: "{{ survey_url }}"
+    sv_token: "{{ survey_token }}"
+
+  pre_tasks:
+    - name: Validate at least one resize parameter is provided
+      ansible.builtin.assert:
+        that:
+          - survey_vm_cpu is defined or survey_vm_memory is defined
+        fail_msg: "At least one of survey_vm_cpu or survey_vm_memory must be provided."
+
+    - name: Fetch current VM definition
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ vm_name }}"
+        namespace: "{{ target_namespace }}"
+        host: "{{ sv_host }}"
+        api_key: "{{ sv_token }}"
+        verify_ssl: false
+      register: vm_info
+
+    - name: Fail if VM not found
+      ansible.builtin.assert:
+        that:
+          - vm_info.resources | length > 0
+        fail_msg: "VM '{{ vm_name }}' not found in namespace '{{ target_namespace }}'."
+
+  tasks:
+    - name: Build CPU patch
+      ansible.builtin.set_fact:
+        cpu_patch: "{{ cpu_patch_raw | from_yaml }}"
+      vars:
+        cpu_patch_raw: |
+          cpu:
+            cores: {{ survey_vm_cpu | int }}
+      when: survey_vm_cpu is defined
+
+    - name: Build memory patch
+      ansible.builtin.set_fact:
+        memory_patch:
+          memory:
+            guest: "{{ survey_vm_memory }}"
+      when: survey_vm_memory is defined
+
+    - name: Merge domain patch
+      ansible.builtin.set_fact:
+        domain_patch: "{{ (cpu_patch | default({})) | combine(memory_patch | default({})) }}"
+
+    - name: Apply resize patch to VM
+      kubernetes.core.k8s:
+        state: patched
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ vm_name }}"
+        namespace: "{{ target_namespace }}"
+        definition:
+          spec:
+            template:
+              spec:
+                domain: "{{ domain_patch }}"
+        host: "{{ sv_host }}"
+        api_key: "{{ sv_token }}"
+        verify_ssl: false
+      register: patch_result
+
+    - name: Output Summary
+      ansible.builtin.debug:
+        msg: >-
+          VM {{ vm_name }} resized:
+          {% if survey_vm_cpu is defined %}CPU cores={{ survey_vm_cpu }}{% endif %}
+          {% if survey_vm_memory is defined %}Memory={{ survey_vm_memory }}{% endif %}.
+          Note: changes take effect on next VM restart.
