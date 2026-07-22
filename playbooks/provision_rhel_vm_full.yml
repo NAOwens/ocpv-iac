@@ -42,7 +42,7 @@
 
                 domain:
                   cpu:
-                    cores: "{{ vm_cpu }}"
+                    cores: "{{ vm_cpu | int }}"
                   memory:
                     guest: "{{ vm_memory }}"
                   devices:
