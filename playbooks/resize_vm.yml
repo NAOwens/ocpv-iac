@@ -12,10 +12,22 @@
     sv_token: "{{ survey_token }}"
 
   pre_tasks:
+    - name: Debug raw survey values
+      ansible.builtin.debug:
+        msg:
+          - "survey_vm_cpu: '{{ survey_vm_cpu | default('UNDEFINED') }}'"
+          - "survey_vm_memory: '{{ survey_vm_memory | default('UNDEFINED') }}'"
+
     - name: Resolve which fields were provided
       ansible.builtin.set_fact:
-        has_cpu_change: "{{ survey_vm_cpu | default('') | string | trim | length > 0 }}"
-        has_memory_change: "{{ survey_vm_memory | default('') | string | trim | length > 0 }}"
+        has_cpu_change: "{{ (survey_vm_cpu | default('') | string | trim) != '' }}"
+        has_memory_change: "{{ (survey_vm_memory | default('') | string | trim) != '' }}"
+
+    - name: Debug resolved flags
+      ansible.builtin.debug:
+        msg:
+          - "has_cpu_change: {{ has_cpu_change }}"
+          - "has_memory_change: {{ has_memory_change }}"
 
     - name: Validate at least one resize parameter is provided
       ansible.builtin.assert:
