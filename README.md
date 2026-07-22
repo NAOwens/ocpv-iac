@@ -1,77 +1,88 @@
 # Provision RHEL Virtual Machines (IaC)
 
-This repository contains the Infrastructure as Code (IaC) playbook required to provision Red Hat Enterprise Linux (RHEL) Virtual Machines (VMs) on OpenShift Virtualization. It is specifically designed to automate the deployment of virtualized workloads into an **OpenShift environment** utilizing OVN-Localnet networking and integrated storage provisioning.
+This repository contains the Infrastructure as Code (IaC) playbooks required to provision and manage Red Hat Enterprise Linux (RHEL) Virtual Machines on OpenShift Virtualization. It is specifically designed to automate the deployment and lifecycle management of virtualized workloads into an **OpenShift environment** utilizing OVN-Localnet networking and integrated storage provisioning.
 
 ## Overview
 
-This toolset consists of a single, comprehensive playbook designed to handle the end-to-end lifecycle of a VM deployment. By leveraging the `kubernetes.core.k8s` module, the playbook translates simple variable inputs into a complex KubeVirt manifest.
-
 The automation manages the following key areas:
 
-* **Dynamic Manifest Generation:** Constructs a `VirtualMachine` object with precise instance types and OS preferences.
-* **Multi-Interface Networking:** Attaches the VM to both the standard pod network and a secondary bridge network via Multus.
+* **Dynamic Manifest Generation:** Constructs `VirtualMachine` objects with explicit CPU and memory sizing.
+* **Multi-Interface Networking:** Attaches VMs to both the standard pod network and a secondary bridge network via Multus.
 * **Storage Automation:** Utilizes `DataVolumeTemplates` to clone existing RHEL images from the cluster's image registry.
+* **In-Place Resize:** Patches existing VMs with updated CPU and memory without reprovisioning.
 
 ---
 
 ## 1. VM Provisioning Playbook (`provision_rhel_vm_full.yml`)
 
-**Purpose:** Deploys a RHEL Virtual Machine instance with automated SSH key injection and secondary network attachments.
+**Purpose:** Deploys a new RHEL Virtual Machine instance with automated SSH key injection and secondary network attachment.
 **Target Environment:** OpenShift Virtualization (KubeVirt).
 
 **Key Features:**
 
+* **Explicit CPU and Memory Sizing:** Configures CPU cores and memory directly in the domain spec rather than using `VirtualMachineClusterInstancetype`, giving full control over resource allocation per VM.
 * **Automated Credential Injection:** Uses `cloudInitNoCloud` to securely propagate SSH public keys from a Kubernetes Secret into the VM.
-* **Advanced Networking:** Configures dual interfaces: a `masquerade` interface for the default pod network and a `bridge` interface connected to a specified Network Attachment Definition (NAD).
+* **Advanced Networking:** Configures dual interfaces — a `masquerade` interface for the default pod network and a `bridge` interface connected to a specified Network Attachment Definition (NAD).
 * **Image Versioning:** Dynamically selects the source image (RHEL 8, 9, or 10) based on user input, referencing standard cluster `DataSources`.
-* **Storage Integration:** Provisions a 30Gi root disk using a specified StorageClass, ensuring the volume is created and ready before the VM starts.
+* **Storage Integration:** Provisions a 30Gi root disk using a specified StorageClass.
 
-**Required Variables / Survey Inputs:**
+**AAP Survey Variables:**
 
-* `survey_vm_name`: The name assigned to the VM and its associated volume.
-* `survey_os_choice`: The RHEL version to deploy (e.g., `rhel8`, `rhel9`, `rhel10`).
-* `survey_url`: The API host URL for the target OpenShift cluster.
-* `survey_token`: The API token used for authentication.
+| Variable | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `survey_vm_name` | Text | Yes | — | Name assigned to the VM and its associated volume |
+| `survey_os_choice` | Multiple Choice | Yes | — | RHEL version to deploy: `rhel8`, `rhel9`, or `rhel10` |
+| `survey_vm_cpu` | Integer | No | `1` | Number of CPU cores |
+| `survey_vm_memory` | Multiple Choice | No | `4Gi` | Memory allocation (e.g., `2Gi`, `4Gi`, `8Gi`, `16Gi`) |
+| `survey_url` | Text | Yes | — | API host URL for the target OpenShift cluster |
+| `survey_token` | Password | Yes | — | API token used for authentication |
+
+**Example execution:**
+
+```bash
+ansible-playbook playbooks/provision_rhel_vm_full.yml \
+  -e "survey_vm_name=my-rhel9-vm" \
+  -e "survey_os_choice=rhel9" \
+  -e "survey_vm_cpu=2" \
+  -e "survey_vm_memory=4Gi" \
+  -e "survey_url=https://api.cluster.example.com:6443" \
+  -e "survey_token=<token>"
+```
 
 ---
 
 ## 2. VM Resize Playbook (`resize_vm.yml`)
 
-**Purpose:** Resizes the CPU and memory of an existing Virtual Machine in OpenShift Virtualization without recreating it.
+**Purpose:** Modifies the CPU and/or memory of an existing Virtual Machine without reprovisioning it.
 **Target Environment:** OpenShift Virtualization (KubeVirt).
 
 **Key Features:**
 
-* **Instancetype Removal:** Automatically detects and removes `instancetype` and `preference` references from the VM spec, which are incompatible with explicit CPU/memory sizing.
-* **Controlled Restart:** Optionally stops the VM before patching and restarts it afterward, waiting for the VMI to fully terminate and then reach `Running` phase before completing.
-* **Live-Edit Support:** If `restart_vm` is false (or the VM is already halted), the patch is applied without a stop/start cycle — useful when changes will take effect on the next manual boot.
-* **Resize Summary:** Emits a post-task debug message confirming the final CPU topology, memory, and whether a restart occurred.
+* **Partial Updates:** CPU and memory are patched independently — supply only the field(s) you want to change.
+* **Pre-flight Validation:** Confirms the target VM exists before attempting any changes, and enforces minimum resource floors (1 CPU core, 2Gi memory).
+* **Safe Patching:** Uses `state: patched` to update only the domain CPU/memory fields, leaving all other VM configuration (networking, storage, credentials) untouched.
+* **Resize Summary:** Emits a post-task message confirming the updated values and reminding that changes take effect on the next VM restart.
 
-**Required Variables / Survey Inputs:**
+**AAP Survey Variables:**
 
-| Variable | Description |
-|---|---|
-| `survey_vm_name` | Name of the VM to resize |
-| `survey_namespace` | Kubernetes namespace containing the VM |
-| `survey_cpu_cores` | Number of CPU cores per socket |
-| `survey_cpu_sockets` | Number of CPU sockets (default: `1`) |
-| `survey_cpu_threads` | Number of threads per core (default: `1`) |
-| `survey_memory` | Memory in Kubernetes quantity notation (e.g., `4Gi`, `2048Mi`) |
-| `survey_restart_vm` | Boolean — stop and restart the VM to apply changes (default: `true`) |
-| `survey_url` | API host URL for the target OpenShift cluster |
-| `survey_token` | API token used for authentication |
+| Variable | Type | Required | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `survey_vm_name` | Text | Yes | — | — | Name of the existing VM to resize |
+| `survey_url` | Text | Yes | — | — | API host URL for the target OpenShift cluster |
+| `survey_token` | Password | Yes | — | — | API token used for authentication |
+| `survey_target_namespace` | Text | No | `default` | — | Namespace containing the VM |
+| `survey_vm_cpu` | Integer | No | — | Min: `1` | New CPU core count (omit to leave unchanged) |
+| `survey_vm_memory` | Multiple Choice | No | — | Min: `2Gi` | New memory allocation (omit to leave unchanged) |
+
+> At least one of `survey_vm_cpu` or `survey_vm_memory` must be provided.
 
 **Example execution:**
 
 ```bash
 ansible-playbook playbooks/resize_vm.yml \
-  -e "survey_vm_name=my-rhel-vm" \
-  -e "survey_namespace=my-namespace" \
-  -e "survey_cpu_cores=4" \
-  -e "survey_cpu_sockets=1" \
-  -e "survey_cpu_threads=1" \
-  -e "survey_memory=8Gi" \
-  -e "survey_restart_vm=true" \
+  -e "survey_vm_name=my-rhel9-vm" \
+  -e "survey_vm_cpu=4" \
+  -e "survey_vm_memory=8Gi" \
   -e "survey_url=https://api.cluster.example.com:6443" \
   -e "survey_token=<token>"
 ```
@@ -80,19 +91,27 @@ ansible-playbook playbooks/resize_vm.yml \
 
 ## Workflow / Order of Operations
 
-When deploying a new Virtual Machine, execute the playbook as follows:
+### Provisioning a new VM
 
 1. **Select OS Image:** Ensure the required RHEL image exists as a `DataSource` in the `openshift-virtualization-os-images` namespace.
-2. **Verify Network Attachment:** Confirm the `baremetal-network` (or specified `nad_name`) is already defined in the target namespace.
+2. **Verify Network Attachment:** Confirm the `baremetal-network` NAD is already defined in the target namespace.
 3. **Execute Provisioning:** Run `provision_rhel_vm_full.yml` to create the VM manifest and trigger the DataVolume clone.
-4. **Wait for Deployment:** The `runStrategy: Always` ensures the VM boots automatically once the disk cloning is complete.
+4. **Wait for Deployment:** The `runStrategy: Always` ensures the VM boots automatically once disk cloning is complete.
 
-## Known Architectural Quirks Managed by this Codebase
+### Resizing an existing VM
 
-* **SSH Key Propagation:** The playbook explicitly defines a `cloudinitdisk` volume. This is required to bridge the gap between Kubernetes Secrets and the VM's internal `noCloud` metadata service.
-* **SSL Verification:** For environments using internal service addresses with self-signed certificates, `verify_ssl` is set to `false` to prevent connection failures during deployment.
-* **Instance Typing:** Uses `VirtualMachineClusterInstancetype` to standardize hardware resources (CPU/RAM) across the cluster.
+1. **Run `resize_vm.yml`** with the desired CPU and/or memory values.
+2. **Restart the VM** for changes to take effect — KubeVirt applies CPU and memory changes on the next boot cycle.
 
-## Manual steps needed on the new VM after running deploy
+---
 
-1. Verify that the secondary interface is correctly up and assigned an IP from the OVN-Localnet pool.
+## Known Architectural Notes
+
+* **Explicit Sizing over Instancetypes:** These playbooks set CPU and memory directly in the domain spec (`domain.cpu.cores`, `domain.memory.guest`) rather than referencing `VirtualMachineClusterInstancetype`. This avoids instancetype conflicts when patching existing VMs and provides per-VM resource control.
+* **Integer Type Enforcement:** KubeVirt's `cores` field is a `uint32`. The playbooks use `| int` combined with a `from_yaml` block scalar to ensure the value is serialized as a native integer rather than a string in the API payload.
+* **SSH Key Propagation:** A `cloudinitdisk` volume is required to bridge the gap between Kubernetes Secrets and the VM's internal `noCloud` metadata service.
+* **SSL Verification:** `verify_ssl: false` is set for environments using internal service addresses with self-signed certificates.
+
+## Manual Steps After Provisioning
+
+1. Verify the secondary interface is up and assigned an IP from the OVN-Localnet pool.
