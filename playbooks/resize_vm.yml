@@ -8,16 +8,19 @@
     # --- Survey Variables ---
     vm_name: "{{ survey_vm_name }}"
     target_namespace: "{{ survey_target_namespace | default('default') }}"
-    vm_cpu: "{{ survey_vm_cpu | default(omit) }}"
-    vm_memory: "{{ survey_vm_memory | default(omit) }}"
     sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"
 
   pre_tasks:
+    - name: Resolve which fields were provided
+      ansible.builtin.set_fact:
+        has_cpu_change: "{{ survey_vm_cpu | default('') | string | trim | length > 0 }}"
+        has_memory_change: "{{ survey_vm_memory | default('') | string | trim | length > 0 }}"
+
     - name: Validate at least one resize parameter is provided
       ansible.builtin.assert:
         that:
-          - (survey_vm_cpu | default('')) | length > 0 or (survey_vm_memory | default('')) | length > 0
+          - has_cpu_change or has_memory_change
         fail_msg: "At least one of survey_vm_cpu or survey_vm_memory must be provided."
 
     - name: Fetch current VM definition
@@ -45,14 +48,14 @@
         cpu_patch_raw: |
           cpu:
             cores: {{ survey_vm_cpu | int }}
-      when: (survey_vm_cpu | default('')) | length > 0
+      when: has_cpu_change
 
     - name: Build memory patch
       ansible.builtin.set_fact:
         memory_patch:
           memory:
             guest: "{{ survey_vm_memory }}"
-      when: (survey_vm_memory | default('')) | length > 0
+      when: has_memory_change
 
     - name: Merge domain patch
       ansible.builtin.set_fact:
@@ -79,6 +82,6 @@
       ansible.builtin.debug:
         msg: >-
           VM {{ vm_name }} resized:
-          {% if (survey_vm_cpu | default('')) | length > 0 %}CPU cores={{ survey_vm_cpu }}{% endif %}
-          {% if (survey_vm_memory | default('')) | length > 0 %}Memory={{ survey_vm_memory }}{% endif %}.
+          {% if has_cpu_change %}CPU cores={{ survey_vm_cpu }}{% endif %}
+          {% if has_memory_change %}Memory={{ survey_vm_memory }}{% endif %}.
           Note: changes take effect on next VM restart.
