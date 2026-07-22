@@ -20,7 +20,9 @@
   tasks:
     - name: Define VirtualMachine Manifest
       ansible.builtin.set_fact:
-        vm_manifest:
+        vm_manifest: "{{ vm_manifest_raw | from_yaml }}"
+      vars:
+        vm_manifest_raw: |
           apiVersion: kubevirt.io/v1
           kind: VirtualMachine
           metadata:
@@ -37,12 +39,10 @@
                       source:
                         secret:
                           secretName: "{{ ssh_secret_name }}"
-                          # Matches the 'key' field in your secret
                           dataKey: key
-
                 domain:
                   cpu:
-                    cores: "{{ vm_cpu | int }}"
+                    cores: {{ vm_cpu | int }}
                   memory:
                     guest: "{{ vm_memory }}"
                   devices:
@@ -64,20 +64,16 @@
                   - name: rootdisk
                     dataVolume:
                       name: "{{ vm_name }}-volume"
-                  # This volume is REQUIRED to propagate the SSH key via noCloud
                   - name: cloudinitdisk
                     cloudInitNoCloud:
-                      # Leave userData empty or minimal; the SSH key is injected here automatically
                       userData: "#cloud-config\nssh_pwauth: False"
-
-            # --- The DataVolume Template handles storage provisioning ---
             dataVolumeTemplates:
               - metadata:
                   name: "{{ vm_name }}-volume"
                 spec:
                   sourceRef:
                     kind: DataSource
-                    name: "{{ os_choice }}" # Matches 'rhel8' or 'rhel9' or 'rhel10'
+                    name: "{{ os_choice }}"
                     namespace: openshift-virtualization-os-images
                   storage:
                     resources:
