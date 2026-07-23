@@ -21,8 +21,8 @@ The automation manages the following key areas:
 **Key Features:**
 
 * **Explicit CPU and Memory Sizing:** Configures CPU cores and memory directly in the domain spec rather than using `VirtualMachineClusterInstancetype`, giving full control over resource allocation per VM.
-* **Automated Credential Injection:** Uses `cloudInitNoCloud` to securely propagate SSH public keys from Kubernetes Secrets into the VM, supporting multiple users with independent key secrets.
-* **Automation User Provisioning:** Creates a local `norman` automation user at first boot with a dedicated sudoers file granting passwordless sudo, using a separate SSH key secret (`norman-pub`).
+* **Automated Credential Injection:** Uses `cloudInitNoCloud` to propagate the primary SSH public key from the `my-mac-pub` Kubernetes Secret into `cloud-user` at first boot.
+* **Automation User Provisioning:** Creates a local `norman` automation user at first boot with passwordless sudo via `/etc/sudoers.d/norman`. Norman's SSH public key is injected directly into cloud-init via the `automation_ssh_public_key` variable, supplied by an AAP Custom Credential Type.
 * **Advanced Networking:** Configures dual interfaces — a `masquerade` interface for the default pod network and a `bridge` interface connected to a specified Network Attachment Definition (NAD).
 * **Image Versioning:** Dynamically selects the source image (RHEL 8, 9, or 10) based on user input, referencing standard cluster `DataSources`.
 * **Storage Integration:** Provisions a 30Gi root disk using a specified StorageClass.
@@ -62,7 +62,7 @@ ansible-playbook playbooks/provision_rhel_vm_full.yml \
 * **Batch Provisioning:** Loops over a user-defined list of VM definitions, provisioning each sequentially.
 * **Per-VM Customization:** Each VM in the list can specify its own OS image, CPU, and memory independently.
 * **Shared Infrastructure:** All VMs in a run share the same namespace, storage class, SSH secret, and NAD.
-* **Automation User Provisioning:** Creates the `norman` automation user on every VM at first boot with passwordless sudo via `/etc/sudoers.d/norman`.
+* **Automation User Provisioning:** Creates the `norman` automation user on every VM at first boot with passwordless sudo via `/etc/sudoers.d/norman`. SSH key is injected via `automation_ssh_public_key` supplied by an AAP Custom Credential Type.
 
 **VM list fields:**
 
@@ -122,6 +122,7 @@ vms:
 
 3. Enable **Prompt on Launch** for the Extra Variables field so operators can edit the VM list each time the job is run.
 4. Add `survey_url` and `survey_token` via a survey or credential injection.
+5. Attach the `SSH Public Key` Custom Credential (see AAP Credential Setup below) to inject `automation_ssh_public_key` for the `norman` user.
 
 > **AAP tip:** Use JSON format in the Extra Variables field to avoid YAML parsing errors. JSON is unambiguous and AAP accepts it without issues:
 > ```json
@@ -134,6 +135,32 @@ vms:
 > ```
 
 > The `vms` list is required. The playbook will fail with a clear error if it is not provided.
+
+### AAP Credential Setup
+
+Norman's SSH public key is injected into VMs via a Custom Credential Type rather than a Kubernetes Secret. Set this up once and attach it to any Job Template that provisions VMs.
+
+**Create the Credential Type** (`Automation Execution → Infrastructure → Credential Types`):
+
+- **Input Configuration:**
+```yaml
+fields:
+  - id: ssh_public_key
+    type: string
+    label: SSH Public Key
+    multiline: true
+    secret: false
+required:
+  - ssh_public_key
+```
+
+- **Injector Configuration:**
+```yaml
+extra_vars:
+  automation_ssh_public_key: '{{ ssh_public_key }}'
+```
+
+**Create the Credential** using this type and paste norman's public key into the **SSH Public Key** field. Attach it to the Job Template alongside the other credentials.
 
 ---
 
@@ -181,18 +208,20 @@ ansible-playbook playbooks/resize_vm.yml \
 
 1. **Select OS Image:** Ensure the required RHEL image exists as a `DataSource` in the `openshift-virtualization-os-images` namespace.
 2. **Verify Network Attachment:** Confirm the `baremetal-network` NAD is already defined in the target namespace.
-3. **Verify SSH Secrets:** Confirm both `noowens-mac-pub` and `norman-pub` Kubernetes Secrets exist in the target namespace.
-4. **Execute Provisioning:** Run `provision_rhel_vm_full.yml` to create the VM manifest and trigger the DataVolume clone.
+3. **Verify SSH Secret:** Confirm the `my-mac-pub` Kubernetes Secret exists in the target namespace.
+4. **Attach AAP Credential:** Ensure the `SSH Public Key` Custom Credential is attached to the Job Template to inject `automation_ssh_public_key` for the `norman` user.
+5. **Execute Provisioning:** Run `provision_rhel_vm_full.yml` to create the VM manifest and trigger the DataVolume clone.
 5. **Wait for Deployment:** The `runStrategy: Always` ensures the VM boots automatically once disk cloning is complete.
 
 ### Provisioning multiple VMs
 
 1. **Select OS Images:** Ensure all required RHEL images exist as `DataSources` in the `openshift-virtualization-os-images` namespace.
 2. **Verify Network Attachment:** Confirm the `baremetal-network` NAD is already defined in the target namespace.
-3. **Verify SSH Secrets:** Confirm both `noowens-mac-pub` and `norman-pub` Kubernetes Secrets exist in the target namespace.
-4. **Define VM List:** Prepare the `vms` list in a local `vms.yml` file or in the AAP Job Template Extra Variables field.
-5. **Execute Provisioning:** Run `provision_multiple_vms.yml` — VMs are provisioned sequentially in the order listed.
-6. **Wait for Deployment:** Each VM boots automatically once its DataVolume clone completes.
+3. **Verify SSH Secret:** Confirm the `my-mac-pub` Kubernetes Secret exists in the target namespace.
+4. **Attach AAP Credential:** Ensure the `SSH Public Key` Custom Credential is attached to the Job Template to inject `automation_ssh_public_key` for the `norman` user.
+5. **Define VM List:** Prepare the `vms` list in a local `vms.yml` file or in the AAP Job Template Extra Variables field.
+6. **Execute Provisioning:** Run `provision_multiple_vms.yml` — VMs are provisioned sequentially in the order listed.
+7. **Wait for Deployment:** Each VM boots automatically once its DataVolume clone completes.
 
 ### Resizing an existing VM
 
@@ -205,8 +234,8 @@ ansible-playbook playbooks/resize_vm.yml \
 
 * **Explicit Sizing over Instancetypes:** These playbooks set CPU and memory directly in the domain spec (`domain.cpu.cores`, `domain.memory.guest`) rather than referencing `VirtualMachineClusterInstancetype`. This avoids instancetype conflicts when patching existing VMs and provides per-VM resource control.
 * **Integer Type Enforcement:** KubeVirt's `cores` field is a `uint32`. The playbooks use `| int` combined with a `from_yaml` block scalar to ensure the value is serialized as a native integer rather than a string in the API payload.
-* **SSH Key Propagation:** A `cloudinitdisk` volume is required to bridge the gap between Kubernetes Secrets and the VM's internal `noCloud` metadata service. Multiple `accessCredentials` entries are supported — each user can reference an independent Kubernetes Secret.
-* **Automation User (`norman`):** Created at first boot via `cloudInitNoCloud`. Sudo access is granted through `/etc/sudoers.d/norman` (`ALL=(ALL) NOPASSWD:ALL`, permissions `0440`) rather than wheel group membership. SSH key is injected from the `norman-pub` Kubernetes Secret separately from the primary `noowens-mac-pub` secret.
+* **SSH Key Propagation:** A `cloudinitdisk` volume is required to bridge the gap between Kubernetes Secrets and the VM's internal `noCloud` metadata service. KubeVirt's `noCloud` propagation only injects SSH keys into the **default cloud-init user** (`cloud-user` on RHEL) — custom users do not receive keys through `accessCredentials`.
+* **Automation User (`norman`):** Created at first boot via `cloudInitNoCloud`. Sudo access is granted through `/etc/sudoers.d/norman` (`ALL=(ALL) NOPASSWD:ALL`, permissions `0440`) rather than wheel group membership. Because KubeVirt cannot inject SSH keys into custom users via `accessCredentials`, norman's public key is embedded directly in the cloud-init `users:` block using the `automation_ssh_public_key` variable, injected at job runtime by an AAP Custom Credential Type. The `norman-pub` Kubernetes Secret is not required.
 * **SSL Verification:** `verify_ssl: false` is set for environments using internal service addresses with self-signed certificates.
 
 ## Manual Steps After Provisioning

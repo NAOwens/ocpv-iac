@@ -10,6 +10,8 @@
         - default
         - name: {{ automation_user }}
           shell: /bin/bash
+          ssh_authorized_keys:
+            - {{ automation_ssh_public_key }}
       write_files:
         - path: /etc/sudoers.d/{{ automation_user }}
           content: '{{ automation_user }} ALL=(ALL) NOPASSWD:ALL'
@@ -31,12 +33,6 @@
                   source:
                     secret:
                       secretName: "{{ ssh_secret_name }}"
-              - sshPublicKey:
-                  propagationMethod:
-                    noCloud: {}
-                  source:
-                    secret:
-                      secretName: "{{ automation_ssh_secret_name }}"
             domain:
               cpu:
                 cores: {{ vm.cpu | default(1) | int }}

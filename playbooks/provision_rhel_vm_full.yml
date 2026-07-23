@@ -12,12 +12,11 @@
     vm_cpu: "{{ survey_vm_cpu | default(1) | int }}"
     vm_memory: "{{ survey_vm_memory | default('4Gi') }}"
     storage_class: "lvms-vg1-immediate"
-    ssh_secret_name: "noowens-mac-pub"
+    ssh_secret_name: "my-mac-pub"
     nad_name: "baremetal-network"
     sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"
     automation_user: "norman"
-    automation_ssh_secret_name: "norman-pub"
 
   tasks:
     - name: Define VirtualMachine Manifest
@@ -31,6 +30,8 @@
             - default
             - name: {{ automation_user }}
               shell: /bin/bash
+              ssh_authorized_keys:
+                - {{ automation_ssh_public_key }}
           write_files:
             - path: /etc/sudoers.d/{{ automation_user }}
               content: '{{ automation_user }} ALL=(ALL) NOPASSWD:ALL'
@@ -52,12 +53,6 @@
                       source:
                         secret:
                           secretName: "{{ ssh_secret_name }}"
-                  - sshPublicKey:
-                      propagationMethod:
-                        noCloud: {}
-                      source:
-                        secret:
-                          secretName: "{{ automation_ssh_secret_name }}"
                 domain:
                   cpu:
                     cores: {{ vm_cpu | int }}
