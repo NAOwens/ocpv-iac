@@ -12,6 +12,8 @@
     nad_name: "baremetal-network"
     sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"
+    automation_user: "norman"
+    automation_ssh_secret_name: "norman-pub"
 
     # --- VM Definitions ---
     # Pass via: -e @vms.yml  or  AAP Job Template Extra Variables (Prompt on Launch)

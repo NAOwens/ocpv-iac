@@ -21,7 +21,8 @@ The automation manages the following key areas:
 **Key Features:**
 
 * **Explicit CPU and Memory Sizing:** Configures CPU cores and memory directly in the domain spec rather than using `VirtualMachineClusterInstancetype`, giving full control over resource allocation per VM.
-* **Automated Credential Injection:** Uses `cloudInitNoCloud` to securely propagate SSH public keys from a Kubernetes Secret into the VM.
+* **Automated Credential Injection:** Uses `cloudInitNoCloud` to securely propagate SSH public keys from Kubernetes Secrets into the VM, supporting multiple users with independent key secrets.
+* **Automation User Provisioning:** Creates a local `norman` automation user at first boot with a dedicated sudoers file granting passwordless sudo, using a separate SSH key secret (`norman-pub`).
 * **Advanced Networking:** Configures dual interfaces — a `masquerade` interface for the default pod network and a `bridge` interface connected to a specified Network Attachment Definition (NAD).
 * **Image Versioning:** Dynamically selects the source image (RHEL 8, 9, or 10) based on user input, referencing standard cluster `DataSources`.
 * **Storage Integration:** Provisions a 30Gi root disk using a specified StorageClass.
@@ -61,6 +62,7 @@ ansible-playbook playbooks/provision_rhel_vm_full.yml \
 * **Batch Provisioning:** Loops over a user-defined list of VM definitions, provisioning each sequentially.
 * **Per-VM Customization:** Each VM in the list can specify its own OS image, CPU, and memory independently.
 * **Shared Infrastructure:** All VMs in a run share the same namespace, storage class, SSH secret, and NAD.
+* **Automation User Provisioning:** Creates the `norman` automation user on every VM at first boot with passwordless sudo via `/etc/sudoers.d/norman`.
 
 **VM list fields:**
 
@@ -179,16 +181,18 @@ ansible-playbook playbooks/resize_vm.yml \
 
 1. **Select OS Image:** Ensure the required RHEL image exists as a `DataSource` in the `openshift-virtualization-os-images` namespace.
 2. **Verify Network Attachment:** Confirm the `baremetal-network` NAD is already defined in the target namespace.
-3. **Execute Provisioning:** Run `provision_rhel_vm_full.yml` to create the VM manifest and trigger the DataVolume clone.
-4. **Wait for Deployment:** The `runStrategy: Always` ensures the VM boots automatically once disk cloning is complete.
+3. **Verify SSH Secrets:** Confirm both `noowens-mac-pub` and `norman-pub` Kubernetes Secrets exist in the target namespace.
+4. **Execute Provisioning:** Run `provision_rhel_vm_full.yml` to create the VM manifest and trigger the DataVolume clone.
+5. **Wait for Deployment:** The `runStrategy: Always` ensures the VM boots automatically once disk cloning is complete.
 
 ### Provisioning multiple VMs
 
 1. **Select OS Images:** Ensure all required RHEL images exist as `DataSources` in the `openshift-virtualization-os-images` namespace.
 2. **Verify Network Attachment:** Confirm the `baremetal-network` NAD is already defined in the target namespace.
-3. **Define VM List:** Prepare the `vms` list in a local `vms.yml` file or in the AAP Job Template Extra Variables field.
-4. **Execute Provisioning:** Run `provision_multiple_vms.yml` — VMs are provisioned sequentially in the order listed.
-5. **Wait for Deployment:** Each VM boots automatically once its DataVolume clone completes.
+3. **Verify SSH Secrets:** Confirm both `noowens-mac-pub` and `norman-pub` Kubernetes Secrets exist in the target namespace.
+4. **Define VM List:** Prepare the `vms` list in a local `vms.yml` file or in the AAP Job Template Extra Variables field.
+5. **Execute Provisioning:** Run `provision_multiple_vms.yml` — VMs are provisioned sequentially in the order listed.
+6. **Wait for Deployment:** Each VM boots automatically once its DataVolume clone completes.
 
 ### Resizing an existing VM
 
@@ -201,7 +205,8 @@ ansible-playbook playbooks/resize_vm.yml \
 
 * **Explicit Sizing over Instancetypes:** These playbooks set CPU and memory directly in the domain spec (`domain.cpu.cores`, `domain.memory.guest`) rather than referencing `VirtualMachineClusterInstancetype`. This avoids instancetype conflicts when patching existing VMs and provides per-VM resource control.
 * **Integer Type Enforcement:** KubeVirt's `cores` field is a `uint32`. The playbooks use `| int` combined with a `from_yaml` block scalar to ensure the value is serialized as a native integer rather than a string in the API payload.
-* **SSH Key Propagation:** A `cloudinitdisk` volume is required to bridge the gap between Kubernetes Secrets and the VM's internal `noCloud` metadata service.
+* **SSH Key Propagation:** A `cloudinitdisk` volume is required to bridge the gap between Kubernetes Secrets and the VM's internal `noCloud` metadata service. Multiple `accessCredentials` entries are supported — each user can reference an independent Kubernetes Secret.
+* **Automation User (`norman`):** Created at first boot via `cloudInitNoCloud`. Sudo access is granted through `/etc/sudoers.d/norman` (`ALL=(ALL) NOPASSWD:ALL`, permissions `0440`) rather than wheel group membership. SSH key is injected from the `norman-pub` Kubernetes Secret separately from the primary `noowens-mac-pub` secret.
 * **SSL Verification:** `verify_ssl: false` is set for environments using internal service addresses with self-signed certificates.
 
 ## Manual Steps After Provisioning

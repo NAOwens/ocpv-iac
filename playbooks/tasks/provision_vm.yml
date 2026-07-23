@@ -21,6 +21,13 @@
                     secret:
                       secretName: "{{ ssh_secret_name }}"
                       dataKey: key
+              - sshPublicKey:
+                  propagationMethod:
+                    noCloud: {}
+                  source:
+                    secret:
+                      secretName: "{{ automation_ssh_secret_name }}"
+                      dataKey: key
             domain:
               cpu:
                 cores: {{ vm.cpu | default(1) | int }}
@@ -47,7 +54,16 @@
                   name: "{{ vm.name }}-volume"
               - name: cloudinitdisk
                 cloudInitNoCloud:
-                  userData: "#cloud-config\nssh_pwauth: False"
+                  userData: |
+                    #cloud-config
+                    ssh_pwauth: False
+                    users:
+                      - name: {{ automation_user }}
+                        shell: /bin/bash
+                    write_files:
+                      - path: /etc/sudoers.d/{{ automation_user }}
+                        content: "{{ automation_user }} ALL=(ALL) NOPASSWD:ALL\n"
+                        permissions: '0440'
         dataVolumeTemplates:
           - metadata:
               name: "{{ vm.name }}-volume"
