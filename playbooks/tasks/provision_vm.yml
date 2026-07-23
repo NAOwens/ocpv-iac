@@ -3,6 +3,16 @@
   ansible.builtin.set_fact:
     vm_manifest: "{{ vm_manifest_raw | from_yaml }}"
   vars:
+    cloud_init_userdata: |
+      #cloud-config
+      ssh_pwauth: False
+      users:
+        - name: {{ automation_user }}
+          shell: /bin/bash
+      write_files:
+        - path: /etc/sudoers.d/{{ automation_user }}
+          content: '{{ automation_user }} ALL=(ALL) NOPASSWD:ALL'
+          permissions: '0440'
     vm_manifest_raw: |
       apiVersion: kubevirt.io/v1
       kind: VirtualMachine
@@ -54,16 +64,7 @@
                   name: "{{ vm.name }}-volume"
               - name: cloudinitdisk
                 cloudInitNoCloud:
-                  userData: |
-                    #cloud-config
-                    ssh_pwauth: False
-                    users:
-                      - name: {{ automation_user }}
-                        shell: /bin/bash
-                    write_files:
-                      - path: /etc/sudoers.d/{{ automation_user }}
-                        content: "{{ automation_user }} ALL=(ALL) NOPASSWD:ALL\n"
-                        permissions: '0440'
+                  userData: {{ cloud_init_userdata | to_json }}
         dataVolumeTemplates:
           - metadata:
               name: "{{ vm.name }}-volume"
