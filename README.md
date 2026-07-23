@@ -121,6 +121,16 @@ vms:
 3. Enable **Prompt on Launch** for the Extra Variables field so operators can edit the VM list each time the job is run.
 4. Add `survey_url` and `survey_token` via a survey or credential injection.
 
+> **AAP tip:** Use JSON format in the Extra Variables field to avoid YAML parsing errors. JSON is unambiguous and AAP accepts it without issues:
+> ```json
+> {
+>   "vms": [
+>     {"name": "web-01", "os": "rhel9", "cpu": 2, "memory": "8Gi"},
+>     {"name": "web-02", "os": "rhel9", "cpu": 2, "memory": "8Gi"}
+>   ]
+> }
+> ```
+
 > The `vms` list is required. The playbook will fail with a clear error if it is not provided.
 
 ---
