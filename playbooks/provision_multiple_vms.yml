@@ -1,0 +1,28 @@
+---
+- name: Provision Multiple RHEL VMs with OVN-Localnet Networking
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # --- Shared Infrastructure Settings ---
+    target_namespace: "default"
+    storage_class: "lvms-vg1-immediate"
+    ssh_secret_name: "noowens-mac-pub"
+    nad_name: "baremetal-network"
+    sv_host: "{{ survey_url }}"
+    sv_token: "{{ survey_token }}"
+
+    # --- VM Definitions ---
+    # Pass via: -e @vms.yml  or  AAP Job Template Extra Variables (Prompt on Launch)
+    # Each entry supports: name (required), os (required), cpu (default: 1), memory (default: 4Gi)
+    # os values: rhel8, rhel9, rhel10
+    vms: "{{ vms | mandatory('vms list is required. Pass with -e @vms.yml or via AAP Extra Variables.') }}"
+
+  tasks:
+    - name: Provision each VM
+      ansible.builtin.include_tasks: tasks/provision_vm.yml
+      loop: "{{ vms }}"
+      loop_control:
+        loop_var: vm
+        label: "{{ vm.name }}"

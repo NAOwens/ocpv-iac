@@ -1,0 +1,76 @@
+---
+- name: Define VirtualMachine Manifest for {{ vm.name }}
+  ansible.builtin.set_fact:
+    vm_manifest: "{{ vm_manifest_raw | from_yaml }}"
+  vars:
+    vm_manifest_raw: |
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: "{{ vm.name }}"
+        namespace: "{{ target_namespace }}"
+      spec:
+        runStrategy: Always
+        template:
+          spec:
+            accessCredentials:
+              - sshPublicKey:
+                  propagationMethod:
+                    noCloud: {}
+                  source:
+                    secret:
+                      secretName: "{{ ssh_secret_name }}"
+                      dataKey: key
+            domain:
+              cpu:
+                cores: {{ vm.cpu | default(1) | int }}
+              memory:
+                guest: "{{ vm.memory | default('4Gi') }}"
+              devices:
+                disks:
+                  - name: rootdisk
+                    disk: {}
+                interfaces:
+                  - name: default
+                    masquerade: {}
+                  - name: bridge-net
+                    bridge: {}
+            networks:
+              - name: default
+                pod: {}
+              - name: bridge-net
+                multus:
+                  networkName: "{{ nad_name }}"
+            volumes:
+              - name: rootdisk
+                dataVolume:
+                  name: "{{ vm.name }}-volume"
+              - name: cloudinitdisk
+                cloudInitNoCloud:
+                  userData: "#cloud-config\nssh_pwauth: False"
+        dataVolumeTemplates:
+          - metadata:
+              name: "{{ vm.name }}-volume"
+            spec:
+              sourceRef:
+                kind: DataSource
+                name: "{{ vm.os }}"
+                namespace: openshift-virtualization-os-images
+              storage:
+                resources:
+                  requests:
+                    storage: 30Gi
+                storageClassName: "{{ storage_class }}"
+
+- name: Deploy VM {{ vm.name }} to OpenShift
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ vm_manifest }}"
+    host: "{{ sv_host }}"
+    api_key: "{{ sv_token }}"
+    verify_ssl: false
+  register: vm_result
+
+- name: Output Summary for {{ vm.name }}
+  ansible.builtin.debug:
+    msg: "VM {{ vm.name }} deployed to {{ target_namespace }}. Attachment to {{ nad_name }} successful using API Token"

@@ -51,7 +51,81 @@ ansible-playbook playbooks/provision_rhel_vm_full.yml \
 
 ---
 
-## 2. VM Resize Playbook (`resize_vm.yml`)
+## 2. Bulk VM Provisioning Playbook (`provision_multiple_vms.yml`)
+
+**Purpose:** Deploys multiple RHEL Virtual Machines in a single run using the same networking and storage configuration as `provision_rhel_vm_full.yml`.
+**Target Environment:** OpenShift Virtualization (KubeVirt).
+
+**Key Features:**
+
+* **Batch Provisioning:** Loops over a user-defined list of VM definitions, provisioning each sequentially.
+* **Per-VM Customization:** Each VM in the list can specify its own OS image, CPU, and memory independently.
+* **Shared Infrastructure:** All VMs in a run share the same namespace, storage class, SSH secret, and NAD.
+
+**VM list fields:**
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `name` | Yes | — | Name assigned to the VM and its associated volume |
+| `os` | Yes | — | RHEL version to deploy: `rhel8`, `rhel9`, or `rhel10` |
+| `cpu` | No | `1` | Number of CPU cores |
+| `memory` | No | `4Gi` | Memory allocation (e.g., `2Gi`, `4Gi`, `8Gi`, `16Gi`) |
+
+### Running from the CLI
+
+Create a `vms.yml` file with the list of VMs to provision:
+
+```yaml
+# vms.yml
+vms:
+  - name: web-01
+    os: rhel9
+    cpu: 2
+    memory: 8Gi
+  - name: web-02
+    os: rhel9
+    cpu: 2
+    memory: 8Gi
+  - name: db-01
+    os: rhel9
+    cpu: 4
+    memory: 16Gi
+```
+
+Then run:
+
+```bash
+ansible-playbook playbooks/provision_multiple_vms.yml \
+  -e "survey_url=https://api.cluster.example.com:6443" \
+  -e "survey_token=<token>" \
+  -e @vms.yml
+```
+
+### Running from AAP (Recommended)
+
+1. Create a Job Template pointing to `provision_multiple_vms.yml`.
+2. In the Job Template, add the `vms` list to the **Extra Variables** field:
+
+```yaml
+vms:
+  - name: web-01
+    os: rhel9
+    cpu: 2
+    memory: 8Gi
+  - name: web-02
+    os: rhel9
+    cpu: 2
+    memory: 8Gi
+```
+
+3. Enable **Prompt on Launch** for the Extra Variables field so operators can edit the VM list each time the job is run.
+4. Add `survey_url` and `survey_token` via a survey or credential injection.
+
+> The `vms` list is required. The playbook will fail with a clear error if it is not provided.
+
+---
+
+## 3. VM Resize Playbook (`resize_vm.yml`)
 
 **Purpose:** Modifies the CPU and/or memory of an existing Virtual Machine without reprovisioning it.
 **Target Environment:** OpenShift Virtualization (KubeVirt).
@@ -91,12 +165,20 @@ ansible-playbook playbooks/resize_vm.yml \
 
 ## Workflow / Order of Operations
 
-### Provisioning a new VM
+### Provisioning a single VM
 
 1. **Select OS Image:** Ensure the required RHEL image exists as a `DataSource` in the `openshift-virtualization-os-images` namespace.
 2. **Verify Network Attachment:** Confirm the `baremetal-network` NAD is already defined in the target namespace.
 3. **Execute Provisioning:** Run `provision_rhel_vm_full.yml` to create the VM manifest and trigger the DataVolume clone.
 4. **Wait for Deployment:** The `runStrategy: Always` ensures the VM boots automatically once disk cloning is complete.
+
+### Provisioning multiple VMs
+
+1. **Select OS Images:** Ensure all required RHEL images exist as `DataSources` in the `openshift-virtualization-os-images` namespace.
+2. **Verify Network Attachment:** Confirm the `baremetal-network` NAD is already defined in the target namespace.
+3. **Define VM List:** Prepare the `vms` list in a local `vms.yml` file or in the AAP Job Template Extra Variables field.
+4. **Execute Provisioning:** Run `provision_multiple_vms.yml` — VMs are provisioned sequentially in the order listed.
+5. **Wait for Deployment:** Each VM boots automatically once its DataVolume clone completes.
 
 ### Resizing an existing VM
 
