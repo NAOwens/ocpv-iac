@@ -12,7 +12,7 @@
     vm_cpu: "{{ survey_vm_cpu | default(1) | int }}"
     vm_memory: "{{ survey_vm_memory | default('4Gi') }}"
     storage_class: "lvms-vg1-immediate"
-    ssh_secret_name: "noowens-mac-pub"
+    ssh_secret_name: "my-mac-pub"
     nad_name: "baremetal-network"
     sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"

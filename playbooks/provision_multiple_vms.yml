@@ -8,7 +8,7 @@
     # --- Shared Infrastructure Settings ---
     target_namespace: "default"
     storage_class: "lvms-vg1-immediate"
-    ssh_secret_name: "noowens-mac-pub"
+    ssh_secret_name: "my-mac-pub"
     nad_name: "baremetal-network"
     sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"
