@@ -51,14 +51,12 @@
                       source:
                         secret:
                           secretName: "{{ ssh_secret_name }}"
-                          dataKey: key
                   - sshPublicKey:
                       propagationMethod:
                         noCloud: {}
                       source:
                         secret:
                           secretName: "{{ automation_ssh_secret_name }}"
-                          dataKey: key
                 domain:
                   cpu:
                     cores: {{ vm_cpu | int }}
