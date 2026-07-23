@@ -9,22 +9,20 @@
     vm_name: "{{ survey_vm_name }}"
     target_namespace: "default"
     os_choice: "{{ survey_os_choice }}"
-    vm_size: "u1.medium"
+    vm_cpu: "{{ survey_vm_cpu | default(1) | int }}"
+    vm_memory: "{{ survey_vm_memory | default('4Gi') }}"
     storage_class: "lvms-vg1-immediate"
     ssh_secret_name: "noowens-mac-pub"
     nad_name: "baremetal-network"
     sv_host: "{{ survey_url }}"
     sv_token: "{{ survey_token }}"
 
-    os_prefs:
-      rhel8: "rhel.8"
-      rhel9: "rhel.9"
-      rhel10: "rhel.10"
-
   tasks:
     - name: Define VirtualMachine Manifest
       ansible.builtin.set_fact:
-        vm_manifest:
+        vm_manifest: "{{ vm_manifest_raw | from_yaml }}"
+      vars:
+        vm_manifest_raw: |
           apiVersion: kubevirt.io/v1
           kind: VirtualMachine
           metadata:
@@ -32,12 +30,6 @@
             namespace: "{{ target_namespace }}"
           spec:
             runStrategy: Always
-            instancetype:
-              kind: VirtualMachineClusterInstancetype
-              name: "{{ vm_size }}"
-            preference:
-              kind: VirtualMachineClusterPreference
-              name: "{{ os_prefs[os_choice] }}"
             template:
               spec:
                 accessCredentials:
@@ -47,10 +39,12 @@
                       source:
                         secret:
                           secretName: "{{ ssh_secret_name }}"
-                          # Matches the 'key' field in your secret
                           dataKey: key
-
                 domain:
+                  cpu:
+                    cores: {{ vm_cpu | int }}
+                  memory:
+                    guest: "{{ vm_memory }}"
                   devices:
                     disks:
                       - name: rootdisk
@@ -70,20 +64,16 @@
                   - name: rootdisk
                     dataVolume:
                       name: "{{ vm_name }}-volume"
-                  # This volume is REQUIRED to propagate the SSH key via noCloud
                   - name: cloudinitdisk
                     cloudInitNoCloud:
-                      # Leave userData empty or minimal; the SSH key is injected here automatically
                       userData: "#cloud-config\nssh_pwauth: False"
-
-            # --- The DataVolume Template handles storage provisioning ---
             dataVolumeTemplates:
               - metadata:
                   name: "{{ vm_name }}-volume"
                 spec:
                   sourceRef:
                     kind: DataSource
-                    name: "{{ os_choice }}" # Matches 'rhel8' or 'rhel9' or 'rhel10'
+                    name: "{{ os_choice }}" #Matches 'rhel8' or 'rhel9' or 'rhel10'
                     namespace: openshift-virtualization-os-images
                   storage:
                     resources:
