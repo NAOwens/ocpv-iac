@@ -28,6 +28,7 @@
           #cloud-config
           ssh_pwauth: False
           users:
+            - default
             - name: {{ automation_user }}
               shell: /bin/bash
           write_files:
